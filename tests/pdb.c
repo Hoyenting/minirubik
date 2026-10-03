@@ -477,6 +477,58 @@ static int verify_h2(const uint8_t *perm_dist,
     return pass;
 }
 
+static int verify_h3(const uint8_t *exact_dist,
+                     const uint8_t *perm_dist,
+                     const uint8_t *ori_dist)
+{
+    uint32_t mismatches = 0;
+    uint32_t checked = 0;
+
+    uint8_t solution[MAX_SOLUTION];
+    int solution_len;
+    ida_stats_t stats;
+    state_t state;
+
+    printf("\nH3 global optimality\n");
+
+    for (uint32_t rank = 0; rank < STATES; ++rank) {
+        unrank_state(rank, &state);
+
+        if (!ida_solve(&state, perm_dist, ori_dist,
+                       solution, &solution_len, &stats, 0)) {
+            if (mismatches < 10) {
+                printf("H3 failure: rank=%u no solution found\n",
+                       (unsigned) rank);
+            }
+            ++mismatches;
+        } else if (solution_len != exact_dist[rank]) {
+            if (mismatches < 10) {
+                printf("H3 mismatch: rank=%u ida=%d exact=%u\n",
+                       (unsigned) rank,
+                       solution_len,
+                       (unsigned) exact_dist[rank]);
+            }
+            ++mismatches;
+        }
+
+        ++checked;
+
+        /*
+         * Progress output only. This is useful because H3 can take much
+         * longer than H1/H2.
+         */
+        if (checked % 100000U == 0)
+            printf("checked: %u / %u\n",
+                   (unsigned) checked, (unsigned) STATES);
+    }
+
+    printf("states checked: %u\n", (unsigned) checked);
+    printf("mismatches: %u\n", (unsigned) mismatches);
+    printf("H3: %s\n", mismatches == 0 ? "PASS" : "FAIL");
+
+    return mismatches == 0;
+}
+
 static int run_verify(const transitions_t *t,
                       const uint8_t *perm_dist,
                       const uint8_t *ori_dist)
@@ -490,6 +542,7 @@ static int run_verify(const transitions_t *t,
 
     int h1 = verify_h1(exact_dist, perm_dist, ori_dist);
     int h2 = verify_h2(perm_dist, ori_dist);
+    int h3 = verify_h3(exact_dist, perm_dist, ori_dist);
 
     uint8_t diameter = 0;
     for (uint32_t rank = 0; rank < STATES; ++rank)
@@ -499,7 +552,7 @@ static int run_verify(const transitions_t *t,
     printf("\nExact BFS diameter: %u\n", (unsigned) diameter);
 
     free(exact_dist);
-    return h1 && h2 && diameter == 11;
+    return h1 && h2 && h3 && diameter == 11;
 }
 
 static void print_solution(const uint8_t *solution, int solution_len)
